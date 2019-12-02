@@ -1,15 +1,22 @@
 package com.example.myapplication;
 
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.location.Location;
 import android.location.LocationManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.util.Log;
+import android.widget.RemoteViews;
 
 import androidx.annotation.Nullable;
+import androidx.core.app.NotificationCompat;
 
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
@@ -20,7 +27,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 public class TestService extends Service {
-
+    public static final String CHANNEL_ID = "ForegroundServiceChannel";
     private static final String TAG = "BOOMBOOMTESTGPS";
     private LocationManager mLocationManager = null;
     private static final int LOCATION_INTERVAL = 1000;
@@ -94,18 +101,42 @@ public class TestService extends Service {
         Log.d("test", "Service onStartCommand");
         super.onStartCommand(intent, flags, startId);
         FirebaseDatabase database = FirebaseDatabase.getInstance();
-        final DatabaseReference lat = database.getReference("lat");
-        final DatabaseReference lng = database.getReference("lng");
-        final DatabaseReference ti = database.getReference("ti");
+
+        final DatabaseReference latlngti = database.getReference("latlngti");
+        class TestItem{
+            public String lat;
+            public String lng;
+            public String ti;
+
+            public TestItem() {
+
+            }
+        }
+        createNotificationChannel();
+        Intent notificationIntent = new Intent(this, MainActivity.class);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this,
+                0, notificationIntent, 0);
+
+        Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("Foreground Service")
+                .setContentText("Hello")
+                .setContentIntent(pendingIntent)
+                .build();
+
+        startForeground(1, notification);
 
 
         new Thread(new Runnable() {
             @Override
             public void run() {
                 while(true){
+                    TestItem testItem = new TestItem();
                     Log.d("result", String.valueOf(mLocationListeners[1].mLastLocation.getLatitude()) + " " + String.valueOf(mLocationListeners[1].mLastLocation.getLongitude()));
-                    lat.setValue(String.valueOf(mLocationListeners[1].mLastLocation.getLatitude()));
-                    lng.setValue(String.valueOf(mLocationListeners[1].mLastLocation.getLongitude()));
+//                    lat.setValue(String.valueOf(mLocationListeners[1].mLastLocation.getLatitude()));
+                    testItem.lat = String.valueOf(mLocationListeners[1].mLastLocation.getLatitude());
+//                    lng.setValue(String.valueOf(mLocationListeners[1].mLastLocation.getLongitude()));
+                    testItem.lng = String.valueOf(mLocationListeners[1].mLastLocation.getLongitude());
+
 
                     long now = System.currentTimeMillis();
                     // 현재시간을 date 변수에 저장한다.
@@ -114,16 +145,22 @@ public class TestService extends Service {
                     SimpleDateFormat sdfNow = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
                     // nowDate 변수에 값을 저장한다.
                     String formatDate = sdfNow.format(date);
+                    testItem.ti = formatDate;
+                    if(!(testItem.lat.equals("0.0") && testItem.lng.equals("0.0"))){
+                        latlngti.push().setValue(testItem);
 
-                    ti.setValue(formatDate);
-                    try {
-                        Thread.sleep(3000);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
+
+//                    ti.setValue(formatDate);
+                        try {
+                            Thread.sleep(60000);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                        if(threadFlag){
+                            break;
+                        }
                     }
-                    if(threadFlag){
-                       break;
-                    }
+
                 }
 
             }
@@ -159,4 +196,19 @@ public class TestService extends Service {
             mLocationManager = (LocationManager) getApplicationContext().getSystemService(Context.LOCATION_SERVICE);
         }
     }
+
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel serviceChannel = new NotificationChannel(
+                    CHANNEL_ID,
+                    "Foreground Service Channel",
+                    NotificationManager.IMPORTANCE_DEFAULT
+            );
+
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            manager.createNotificationChannel(serviceChannel);
+        }
+    }
+
+
 }
